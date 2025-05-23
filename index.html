@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dams Clock</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    }
+  </script>
+  <style>
+    body, .clock-card {
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    #modeToggle:checked + div .dot {
+      transform: translateX(100%);
+    }
+    .clock-card {
+      background-color: white;
+      color: #1f2937; /* gray-800 */
+      padding: 1rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+      text-align: center;
+    }
+    body.dark .clock-card {
+      background-color: #1f2937; /* gray-800 */
+      color: #f3f4f6; /* gray-100 */
+      border: 1px solid #374151; /* gray-700 */
+      box-shadow: none;
+    }
+    input, button {
+      transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+      font-size: 1rem;
+    }
+    input {
+      background-color: white;
+      color: #1f2937;
+      border: 1px solid #d1d5db; /* gray-300 */
+      border-radius: 0.375rem;
+      padding: 0.5rem 0.75rem;
+      width: 100%;
+    }
+    body.dark input {
+      background-color: #374151; /* gray-700 */
+      color: #f3f4f6;
+      border-color: #4b5563; /* gray-600 */
+    }
+    button {
+      background-color: #2563eb; /* blue-600 */
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    button:hover {
+      background-color: #1e40af; /* blue-800 */
+    }
+    #favorites button {
+      background-color: #e5e7eb; /* bg-gray-200 terang */
+      color: #111827; /* text-gray-900 */
+      border: none;
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    body.dark #favorites button {
+      background-color: #374151; /* bg-gray-700 gelap */
+      color: #f9fafb; /* text-gray-50 terang */
+    }
+    #favorites button:hover {
+      background-color: #d1d5db; /* bg-gray-300 terang */
+    }
+    body.dark #favorites button:hover {
+      background-color: #4b5563; /* bg-gray-600 gelap */
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-gray-800 dark:bg-gray-900 dark:text-white transition duration-300" id="mainBody">
+  <div class="container mx-auto p-4 max-w-4xl">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-3xl font-bold">Dams Clock</h1>
+      <label class="flex items-center cursor-pointer select-none">
+        <span class="mr-2">Gelap</span>
+        <input type="checkbox" id="modeToggle" class="hidden" />
+        <div class="w-10 h-5 bg-gray-300 dark:bg-gray-700 rounded-full shadow-inner relative">
+          <div class="dot absolute w-5 h-5 bg-white dark:bg-gray-300 rounded-full shadow left-0 top-0 transition-transform"></div>
+        </div>
+      </label>
+    </div>
+
+    <div class="mb-4 flex gap-2">
+      <input type="text" id="search" placeholder="Cari zona waktu..." />
+      <button id="saveFavorites">⭐ Simpan</button>
+    </div>
+
+    <div class="mb-4">
+      <h2 class="font-semibold">Favorit:</h2>
+      <div id="favorites" class="flex flex-wrap gap-2 mt-2"></div>
+    </div>
+
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4" id="clocksContainer"></div>
+  </div>
+
+  <script>
+    const timezones = Intl.supportedValuesOf("timeZone");
+    const container = document.getElementById("clocksContainer");
+    const search = document.getElementById("search");
+    const modeToggle = document.getElementById("modeToggle");
+    const toggleDot = document.querySelector(".dot");
+    const favoritesContainer = document.getElementById("favorites");
+    const saveFavorites = document.getElementById("saveFavorites");
+    const body = document.getElementById("mainBody");
+
+    const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    // Nama ramah untuk zona waktu populer
+    const friendlyNames = {
+      "Asia/Jakarta": "Jakarta",
+      "Europe/London": "London",
+      "America/New_York": "New York",
+      "Asia/Tokyo": "Tokyo",
+      "Australia/Sydney": "Sydney"
+    };
+
+    // Ambil favorite dari localStorage atau default
+    let selectedZones = JSON.parse(localStorage.getItem("selectedZones")) || [
+      localZone,
+      "Asia/Jakarta",
+      "Europe/London",
+      "America/New_York",
+      "Asia/Tokyo",
+      "Australia/Sydney"
+    ];
+
+    // Pastikan "Asia/Jakarta" selalu di depan
+    function prioritizeJakarta(zones) {
+      const jakartaIndex = zones.indexOf("Asia/Jakarta");
+      if (jakartaIndex > -1) {
+        zones.splice(jakartaIndex, 1);
+      }
+      zones.unshift("Asia/Jakarta");
+      return zones;
+    }
+    selectedZones = prioritizeJakarta(selectedZones);
+
+    // Load dark mode dari localStorage
+    if (localStorage.getItem("darkMode") === "true") {
+      body.classList.add("dark");
+      modeToggle.checked = true;
+      toggleDot.style.transform = "translateX(100%)";
+    }
+
+    function createClockCard(zone) {
+      const card = document.createElement("div");
+      card.className = "clock-card";
+
+      const zoneEl = document.createElement("h2");
+      zoneEl.className = "font-bold text-lg truncate";
+      zoneEl.textContent = friendlyNames[zone] || zone;
+
+      const iconEl = document.createElement("div");
+      iconEl.className = "text-4xl mt-2";
+      iconEl.id = `icon-${zone}`;
+
+      const timeEl = document.createElement("div");
+      timeEl.className = "text-3xl font-mono mt-2";
+      timeEl.id = `time-${zone}`;
+
+      const dateEl = document.createElement("div");
+      dateEl.className = "text-sm mt-1";
+      dateEl.id = `date-${zone}`;
+
+      const diffEl = document.createElement("div");
+      diffEl.className = "text-xs text-gray-500 mt-1 dark:text-gray-400";
+      diffEl.id = `diff-${zone}`;
+
+      card.appendChild(zoneEl);
+      card.appendChild(iconEl);
+      card.appendChild(timeEl);
+      card.appendChild(dateEl);
+      card.appendChild(diffEl);
+
+      container.appendChild(card);
+    }
+
+    function updateClocks() {
+      const now = new Date();
+      selectedZones.forEach(zone => {
+        const timeFormat = new Intl.DateTimeFormat('id-ID', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+          timeZone: zone
+        });
+        const dateFormat = new Intl.DateTimeFormat('id-ID', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+          timeZone: zone
+        });
+
+        const timeParts = new Intl.DateTimeFormat('en-GB', {
+          hour: '2-digit', hour12: false,
+          timeZone: zone
+        }).formatToParts(now);
+
+        const hourPart = timeParts.find(part => part.type === "hour");
+        const hour = parseInt(hourPart.value);
+
+        const timeEl = document.getElementById(`time-${zone}`);
+        const dateEl = document.getElementById(`date-${zone}`);
+        const iconEl = document.getElementById(`icon-${zone}`);
+        const diffEl = document.getElementById(`diff-${zone}`);
+
+        const localTime = new Date().toLocaleString('en-US', { timeZone: localZone });
+        const targetTime = new Date().toLocaleString('en-US', { timeZone: zone });
+
+        const localDate = new Date(localTime);
+        const targetDate = new Date(targetTime);
+
+        const diffHour = Math.round((targetDate - localDate) / (1000 * 60 * 60));
+        const sign = diffHour > 0 ? "+" : (diffHour < 0 ? "-" : "±");
+
+        if (timeEl && dateEl && iconEl && diffEl) {
+          timeEl.textContent = timeFormat.format(now);
+          dateEl.textContent = dateFormat.format(now);
+          iconEl.textContent = hour >= 6 && hour < 18 ? "☀️" : "🌙";
+          diffEl.textContent = zone !== localZone ? `Waktu ${sign}${Math.abs(diffHour)} jam dari zona lokal` : "Zona waktu lokal";
+        }
+      });
+    }
+
+    function renderClocks(zones) {
+      container.innerHTML = "";
+      zones.forEach(zone => createClockCard(zone));
+      updateClocks();
+      renderFavorites();
+    }
+
+    function renderFavorites() {
+      favoritesContainer.innerHTML = "";
+      selectedZones.forEach(zone => {
+        const btn = document.createElement("button");
+        btn.textContent = friendlyNames[zone] || zone;
+        btn.className = "";
+        btn.addEventListener("click", () => {
+          search.value = friendlyNames[zone] || zone;
+          selectedZones = [zone];
+          renderClocks(selectedZones);
+        });
+        favoritesContainer.appendChild(btn);
+      });
+    }
+
+    search.addEventListener("input", () => {
+      const query = search.value.toLowerCase();
+      const filtered = timezones.filter(tz => tz.toLowerCase().includes(query)).slice(0, 6);
+      selectedZones = filtered.length ? filtered : ["Asia/Jakarta"];
+      selectedZones = prioritizeJakarta(selectedZones);
+      renderClocks(selectedZones);
+    });
+
+    modeToggle.addEventListener("change", () => {
+      const isDark = modeToggle.checked;
+      body.classList.toggle("dark", isDark);
+      toggleDot.style.transform = isDark ? "translateX(100%)" : "translateX(0)";
+      localStorage.setItem("darkMode", isDark);
+    });
+
+    saveFavorites.addEventListener("click", () => {
+      localStorage.setItem("selectedZones", JSON.stringify(selectedZones));
+      alert("Zona waktu favorit disimpan!");
+    });
+
+    renderClocks(selectedZones);
+    setInterval(updateClocks, 1000);
+  </script>
+</body>
+</html>
